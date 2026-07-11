@@ -1,0 +1,129 @@
+// =============================================================================
+// CIDRIX — Prisma Schema v1.0
+// Base: Organizations + Users
+// Sprint: BE-02
+//
+// Convenciones:
+//   - Modelos en PascalCase singular → tablas en snake_case plural (@map)
+//   - Campos en camelCase → columnas en snake_case (@map)
+//   - UUIDs como PKs — sin auto-increment expuesto
+//   - Soft delete mediante deletedAt nullable
+//   - organizationId en toda entidad de negocio (multi-tenant)
+//   - Timestamps UTC en todas las entidades
+//
+// Nota: createdBy / updatedBy se implementan en sprint posterior
+//       junto con la autenticación (BE-06).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Plan de suscripción de la organización.
+/// Controla feature flags y límites por tier desde el día 1.
+enum OrgPlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+/// Rol del usuario dentro de su organización.
+/// ADMIN: acceso total y configuración del sistema.
+/// TECHNICIAN: resuelve tickets asignados.
+/// USER: crea y hace seguimiento de sus propios tickets.
+enum UserRole {
+  ADMIN
+  TECHNICIAN
+  USER
+}
+
+/// Estado del usuario.
+/// DELETED implementa soft delete — el registro existe
+/// pero el usuario no puede autenticarse.
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+// =============================================================================
+// MODELS
+// =============================================================================
+
+/// Tenant raíz del sistema multi-organización.
+/// Toda entidad de negocio referencia esta tabla mediante organization_id.
+model Organization {
+  id       String  @id @default(uuid())
+  /// Nombre visible de la empresa
+  name     String  @db.VarChar(255)
+  /// Identificador URL-safe único — normalizado a minúsculas en la aplicación.
+  /// Habilita subdominios tipo acme.cidrix.com en Fase 2.
+  slug     String  @unique @db.VarChar(100)
+  plan     OrgPlan @default(FREE)
+  isActive Boolean @default(true) @map("is_active")
+
+  /// Configuración variable del tenant (timezone, logo, idioma, etc.).
+  /// Solo para configuración — nunca para lógica de negocio.
+  /// Permite agregar configuraciones sin migraciones adicionales.
+  settings Json @default("{}") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  users User[]
+
+  @@map("organizations")
+}
+
+/// Usuario del sistema, siempre pertenece a una organización.
+/// El email es único por organización, no globalmente —
+/// el mismo email puede existir en dos tenants distintos.
+model User {
+  id             String     @id @default(uuid())
+  organizationId String     @map("organization_id")
+  email          String     @db.VarChar(255)
+  passwordHash   String     @map("password_hash") @db.VarChar(255)
+  fullName       String     @map("full_name") @db.VarChar(255)
+  avatarUrl      String?    @map("avatar_url") @db.VarChar(500)
+  role           UserRole   @default(USER)
+  status         UserStatus @default(ACTIVE)
+
+  /// Hash del refresh token activo.
+  /// Nullable — null significa que no hay sesión activa.
+  /// En MVP: sesión única por usuario.
+  /// Fase 3: migrar a tabla refresh_tokens para sesiones múltiples.
+  refreshTokenHash String? @map("refresh_token_hash") @db.VarChar(255)
+
+  lastLoginAt DateTime? @map("last_login_at")
+
+  /// Soft delete — complementa status DELETED con timestamp exacto.
+  /// Permite auditoría de cuándo fue eliminado el usuario.
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  // Índices
+  /// Email único por organización (no global).
+  @@unique([organizationId, email], name: "uq_users_org_email")
+  /// Filtrar usuarios activos por organización.
+  @@index([organizationId, status], name: "idx_users_org_status")
+  /// Listar técnicos disponibles para asignación de tickets.
+  @@index([organizationId, role], name: "idx_users_org_role")
+
+  @@map("users")
+}
