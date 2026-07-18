@@ -1,34 +1,27 @@
 import { PrismaClient, UserRole, UserStatus, OrgPlan } from '@prisma/client';
-import * as crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
 
 /**
  * Seed de desarrollo — CIDRIX
  *
- * Crea datos mínimos para iniciar el desarrollo de los sprints siguientes:
+ * Crea datos mínimos para desarrollo:
  *   - 1 organización demo
  *   - 1 usuario ADMIN
  *   - 1 usuario TECHNICIAN
  *   - 1 usuario USER
  *
- * IMPORTANTE: Este seed es solo para desarrollo local.
- * Nunca ejecutar en producción.
- *
- * Uso: npm run seed
- *
- * Nota: Las contraseñas se hashean con SHA-256 como placeholder.
- * bcrypt se implementará en BE-06 (AuthModule).
  * Contraseña de todos los usuarios: cidrix123
+ * NUNCA ejecutar en producción.
  */
 
 const prisma = new PrismaClient();
-
-// Placeholder hash hasta BE-06 — NO usar en producción
-function placeholderHash(password: string): string {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
+const SALT_ROUNDS = 10;
+const DEFAULT_PASSWORD = 'cidrix123';
 
 async function main(): Promise<void> {
   console.log('🌱 Iniciando seed de CIDRIX...\n');
+
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, SALT_ROUNDS);
 
   // ------------------------------------------------------------------
   // Organización demo
@@ -38,7 +31,6 @@ async function main(): Promise<void> {
     update: {},
     create: {
       name: 'CIDRIX Demo',
-      // slug normalizado a minúsculas — estrategia aprobada para case-insensitive
       slug: 'cidrix-demo',
       plan: OrgPlan.PROFESSIONAL,
       isActive: true,
@@ -62,11 +54,11 @@ async function main(): Promise<void> {
         email: 'admin@cidrix.dev',
       },
     },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: organization.id,
       email: 'admin@cidrix.dev',
-      passwordHash: placeholderHash('cidrix123'),
+      passwordHash,
       fullName: 'Admin CIDRIX',
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
@@ -85,11 +77,11 @@ async function main(): Promise<void> {
         email: 'tecnico@cidrix.dev',
       },
     },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: organization.id,
       email: 'tecnico@cidrix.dev',
-      passwordHash: placeholderHash('cidrix123'),
+      passwordHash,
       fullName: 'Técnico CIDRIX',
       role: UserRole.TECHNICIAN,
       status: UserStatus.ACTIVE,
@@ -108,11 +100,11 @@ async function main(): Promise<void> {
         email: 'usuario@cidrix.dev',
       },
     },
-    update: {},
+    update: { passwordHash },
     create: {
       organizationId: organization.id,
       email: 'usuario@cidrix.dev',
-      passwordHash: placeholderHash('cidrix123'),
+      passwordHash,
       fullName: 'Usuario CIDRIX',
       role: UserRole.USER,
       status: UserStatus.ACTIVE,
@@ -124,7 +116,7 @@ async function main(): Promise<void> {
   console.log('\n🎉 Seed completado exitosamente.');
   console.log('─────────────────────────────────────────');
   console.log('  Organización : CIDRIX Demo');
-  console.log('  Contraseña   : cidrix123 (placeholder — bcrypt en BE-06)');
+  console.log('  Contraseña   : cidrix123 (bcrypt)');
   console.log('─────────────────────────────────────────\n');
 }
 

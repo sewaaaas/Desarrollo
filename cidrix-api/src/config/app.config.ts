@@ -10,10 +10,6 @@ export interface AppConfig {
   bcryptSaltRounds: number;
 }
 
-/**
- * Configuración de la aplicación.
- * registerAs() permite accederla tipada con ConfigService.get<AppConfig>('app').
- */
 export const appConfig = registerAs(
   'app',
   (): AppConfig => ({
@@ -26,11 +22,6 @@ export const appConfig = registerAs(
   }),
 );
 
-/**
- * Schema Joi de validación de variables de entorno.
- * Si una variable requerida falta o es inválida, la app NO arranca.
- * Se irán agregando variables a medida que se implementen módulos.
- */
 export const validationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test', 'staging')
@@ -41,13 +32,13 @@ export const validationSchema = Joi.object({
   CORS_ORIGINS: Joi.string().default('http://localhost:5173'),
   BCRYPT_SALT_ROUNDS: Joi.number().min(8).max(14).default(10),
 
-  // Database — obligatorio desde BE-03
+  // Database
   DATABASE_URL: Joi.string().optional(),
 
-  // JWT — obligatorio desde BE-06
-  JWT_ACCESS_SECRET: Joi.string().min(32).optional(),
+  // JWT — obligatorio desde BE-03
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string().min(32).optional(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
   // Storage — Sprint 3
