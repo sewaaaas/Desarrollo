@@ -1,18 +1,7 @@
 // =============================================================================
-// CIDRIX — Prisma Schema v1.0
-// Base: Organizations + Users
-// Sprint: BE-02
-//
-// Convenciones:
-//   - Modelos en PascalCase singular → tablas en snake_case plural (@map)
-//   - Campos en camelCase → columnas en snake_case (@map)
-//   - UUIDs como PKs — sin auto-increment expuesto
-//   - Soft delete mediante deletedAt nullable
-//   - organizationId en toda entidad de negocio (multi-tenant)
-//   - Timestamps UTC en todas las entidades
-//
-// Nota: createdBy / updatedBy se implementan en sprint posterior
-//       junto con la autenticación (BE-06).
+// CIDRIX — Prisma Schema v1.1
+// Base: Organizations + Users + Categories
+// Sprint: BE-05
 // =============================================================================
 
 generator client {
@@ -28,8 +17,6 @@ datasource db {
 // ENUMS
 // =============================================================================
 
-/// Plan de suscripción de la organización.
-/// Controla feature flags y límites por tier desde el día 1.
 enum OrgPlan {
   FREE
   STARTER
@@ -37,19 +24,12 @@ enum OrgPlan {
   ENTERPRISE
 }
 
-/// Rol del usuario dentro de su organización.
-/// ADMIN: acceso total y configuración del sistema.
-/// TECHNICIAN: resuelve tickets asignados.
-/// USER: crea y hace seguimiento de sus propios tickets.
 enum UserRole {
   ADMIN
   TECHNICIAN
   USER
 }
 
-/// Estado del usuario.
-/// DELETED implementa soft delete — el registro existe
-/// pero el usuario no puede autenticarse.
 enum UserStatus {
   ACTIVE
   INACTIVE
@@ -60,70 +40,200 @@ enum UserStatus {
 // MODELS
 // =============================================================================
 
-/// Tenant raíz del sistema multi-organización.
-/// Toda entidad de negocio referencia esta tabla mediante organization_id.
 model Organization {
   id       String  @id @default(uuid())
-  /// Nombre visible de la empresa
   name     String  @db.VarChar(255)
-  /// Identificador URL-safe único — normalizado a minúsculas en la aplicación.
+  /// Identificador URL-safe único — normalizado a minúsculas.
   /// Habilita subdominios tipo acme.cidrix.com en Fase 2.
   slug     String  @unique @db.VarChar(100)
   plan     OrgPlan @default(FREE)
   isActive Boolean @default(true) @map("is_active")
-
-  /// Configuración variable del tenant (timezone, logo, idioma, etc.).
-  /// Solo para configuración — nunca para lógica de negocio.
-  /// Permite agregar configuraciones sin migraciones adicionales.
-  settings Json @default("{}") @db.JsonB
+  /// Solo para configuración variable (timezone, logo, idioma).
+  /// Nunca para lógica de negocio.
+  settings Json    @default("{}") @db.JsonB
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
 
   // Relaciones
-  users User[]
+  users      User[]
+  categories Category[]
+  tickets        Ticket[]
+  ticketCounters TicketCounter[]
 
   @@map("organizations")
 }
 
-/// Usuario del sistema, siempre pertenece a una organización.
-/// El email es único por organización, no globalmente —
-/// el mismo email puede existir en dos tenants distintos.
 model User {
   id             String     @id @default(uuid())
   organizationId String     @map("organization_id")
   email          String     @db.VarChar(255)
-  passwordHash   String     @map("password_hash") @db.VarChar(255)
-  fullName       String     @map("full_name") @db.VarChar(255)
-  avatarUrl      String?    @map("avatar_url") @db.VarChar(500)
+  passwordHash   String     @map("password_hash")   @db.VarChar(255)
+  fullName       String     @map("full_name")        @db.VarChar(255)
+  avatarUrl      String?    @map("avatar_url")       @db.VarChar(500)
   role           UserRole   @default(USER)
   status         UserStatus @default(ACTIVE)
-
-  /// Hash del refresh token activo.
-  /// Nullable — null significa que no hay sesión activa.
-  /// En MVP: sesión única por usuario.
+  /// Hash del refresh token activo. Null = sin sesión activa.
   /// Fase 3: migrar a tabla refresh_tokens para sesiones múltiples.
-  refreshTokenHash String? @map("refresh_token_hash") @db.VarChar(255)
-
-  lastLoginAt DateTime? @map("last_login_at")
-
+  refreshTokenHash String?  @map("refresh_token_hash") @db.VarChar(255)
+  lastLoginAt    DateTime?  @map("last_login_at")
   /// Soft delete — complementa status DELETED con timestamp exacto.
-  /// Permite auditoría de cuándo fue eliminado el usuario.
-  deletedAt DateTime? @map("deleted_at")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime?  @map("deleted_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt      @map("updated_at")
 
   // Relaciones
   organization Organization @relation(fields: [organizationId], references: [id])
+  ticketsCreated    Ticket[]        @relation("TicketCreatedBy")
+  ticketsAssigned   Ticket[]        @relation("TicketAssignedTo")
+  ticketHistory     TicketHistory[] @relation("TicketHistoryChangedBy")
 
   // Índices
-  /// Email único por organización (no global).
   @@unique([organizationId, email], name: "uq_users_org_email")
-  /// Filtrar usuarios activos por organización.
-  @@index([organizationId, status], name: "idx_users_org_status")
-  /// Listar técnicos disponibles para asignación de tickets.
-  @@index([organizationId, role], name: "idx_users_org_role")
+  @@index([organizationId, status],  name: "idx_users_org_status")
+  @@index([organizationId, role],    name: "idx_users_org_role")
 
   @@map("users")
+}
+
+model Category {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  name           String    @db.VarChar(100)
+  /// Generado desde name al crear. Estable — no cambia si cambia el nombre.
+  /// Único por organización. Si ya existe al crear → 409 CONFLICT.
+  slug           String    @db.VarChar(100)
+  description    String?   @db.VarChar(500)
+  /// Hex color para UI, ej: #3B82F6
+  color          String?   @db.VarChar(7)
+  isActive       Boolean   @default(true)  @map("is_active")
+  /// parentId nullable — jerarquía reservada.
+  /// MVP: padre debe existir y pertenecer a la misma organización.
+  /// No modificable después de crear.
+  /// Lógica de árbol completa en sprint de Tickets.
+  parentId       String?   @map("parent_id")
+  /// Soft delete — DELETE establece isActive=false + deletedAt.
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt      @map("updated_at")
+
+  // Relaciones
+  organization Organization @relation(fields: [organizationId], references: [id])
+  parent       Category?    @relation("CategoryParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Category[]   @relation("CategoryParent")
+  tickets        Ticket[]
+
+  // Constraints
+  @@unique([organizationId, slug], name: "uq_categories_org_slug")
+  @@index([organizationId, isActive], name: "idx_categories_org_active")
+
+  @@map("categories")
+}
+
+// =============================================================================
+// ENUMS — Tickets
+// =============================================================================
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketHistoryAction {
+  CREATED
+  UPDATED
+  ASSIGNED
+  UNASSIGNED
+  STATUS_CHANGED
+  CANCELLED
+  CLOSED
+}
+
+// =============================================================================
+// MODELS — Tickets
+// =============================================================================
+
+/// Contador atómico de tickets por organización.
+/// Garantiza números secuenciales únicos sin race conditions.
+/// El número legible TKT-0001 se formatea en la API, no se almacena.
+model TicketCounter {
+  organizationId String       @id @map("organization_id")
+  lastNumber     Int          @default(0) @map("last_number")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("ticket_counters")
+}
+
+model Ticket {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  /// Número secuencial por organización. Formateado como TKT-0001 en la API.
+  number         Int
+  title          String         @db.VarChar(255)
+  description    String         @db.Text
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(MEDIUM)
+  /// Optimistic locking — se incrementa en cada mutación.
+  /// El cliente debe enviar el version actual en cada operación de escritura.
+  version        Int            @default(1)
+
+  // Actores
+  createdById    String         @map("created_by_id")
+  assignedToId   String?        @map("assigned_to_id")
+  categoryId     String?        @map("category_id")
+
+  // Timestamps de negocio — preparación SLA
+  /// Se establece en Comments cuando TECHNICIAN o ADMIN responde por primera vez.
+  firstResponseAt   DateTime?   @map("first_response_at")
+  resolvedAt        DateTime?   @map("resolved_at")
+  closedAt          DateTime?   @map("closed_at")
+
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt      @map("updated_at")
+
+  // Relaciones
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  createdBy      User           @relation("TicketCreatedBy",   fields: [createdById],   references: [id])
+  assignedTo     User?          @relation("TicketAssignedTo",  fields: [assignedToId],  references: [id])
+  category       Category?      @relation(fields: [categoryId], references: [id])
+  history        TicketHistory[]
+
+  @@unique([organizationId, number], name: "uq_tickets_org_number")
+  @@index([organizationId, status],      name: "idx_tickets_org_status")
+  @@index([organizationId, assignedToId], name: "idx_tickets_org_assigned")
+  @@index([organizationId, createdById],  name: "idx_tickets_org_created_by")
+  @@index([organizationId, priority],    name: "idx_tickets_org_priority")
+  @@index([organizationId, createdAt],   name: "idx_tickets_org_created_at")
+
+  @@map("tickets")
+}
+
+model TicketHistory {
+  id             String              @id @default(uuid())
+  ticketId       String              @map("ticket_id")
+  organizationId String              @map("organization_id")
+  /// Nullable — algunos cambios pueden ser del sistema (futuro: automatizaciones)
+  changedById    String?             @map("changed_by_id")
+  action         TicketHistoryAction
+  /// JSON con los cambios realizados: { field: { from, to } }
+  changes        Json?               @db.JsonB
+  occurredAt     DateTime            @default(now()) @map("occurred_at")
+
+  ticket         Ticket              @relation(fields: [ticketId], references: [id])
+  changedBy      User?               @relation("TicketHistoryChangedBy", fields: [changedById], references: [id])
+
+  @@index([ticketId], name: "idx_ticket_history_ticket_id")
+
+  @@map("ticket_history")
 }

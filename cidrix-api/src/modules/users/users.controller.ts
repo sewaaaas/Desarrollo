@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,28 +19,18 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UserFiltersDto } from './dto/user-filters.dto';
 import { UserResponseDto, PaginatedUsersDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@common/guards/roles.guard';
+import { Roles } from '@common/decorators/roles.decorator';
 import { CurrentUser } from '@modules/auth/decorators/current-user.decorator';
 import { RequestUser } from '@modules/auth/types/jwt-payload.type';
 
-/**
- * UsersController
- *
- * Todos los endpoints requieren JWT válido.
- * El organizationId siempre se obtiene del token — nunca del cliente.
- *
- * Autorización por rol (RBAC) se implementará en sprint posterior.
- * Por ahora cualquier usuario autenticado puede acceder.
- */
 @Controller('users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  // ---------------------------------------------------------------------------
-  // POST /users — Crear usuario
-  // ---------------------------------------------------------------------------
-
   @Post()
+  @Roles(UserRole.ADMIN)
   async create(
     @CurrentUser() currentUser: RequestUser,
     @Body() dto: CreateUserDto,
@@ -47,11 +38,8 @@ export class UsersController {
     return this.usersService.create(currentUser.organizationId, dto);
   }
 
-  // ---------------------------------------------------------------------------
-  // GET /users — Listar usuarios con filtros y paginación
-  // ---------------------------------------------------------------------------
-
   @Get()
+  @Roles(UserRole.ADMIN)
   async findAll(
     @CurrentUser() currentUser: RequestUser,
     @Query() filters: UserFiltersDto,
@@ -59,11 +47,8 @@ export class UsersController {
     return this.usersService.findAll(currentUser.organizationId, filters);
   }
 
-  // ---------------------------------------------------------------------------
-  // GET /users/:id — Obtener usuario por ID
-  // ---------------------------------------------------------------------------
-
   @Get(':id')
+  @Roles(UserRole.ADMIN)
   async findOne(
     @CurrentUser() currentUser: RequestUser,
     @Param('id') id: string,
@@ -71,11 +56,8 @@ export class UsersController {
     return this.usersService.findOne(currentUser.organizationId, id);
   }
 
-  // ---------------------------------------------------------------------------
-  // PATCH /users/:id — Actualizar usuario
-  // ---------------------------------------------------------------------------
-
   @Patch(':id')
+  @Roles(UserRole.ADMIN)
   async update(
     @CurrentUser() currentUser: RequestUser,
     @Param('id') id: string,
@@ -84,11 +66,8 @@ export class UsersController {
     return this.usersService.update(currentUser.organizationId, id, dto);
   }
 
-  // ---------------------------------------------------------------------------
-  // PATCH /users/:id/status — Activar o desactivar usuario
-  // ---------------------------------------------------------------------------
-
   @Patch(':id/status')
+  @Roles(UserRole.ADMIN)
   async updateStatus(
     @CurrentUser() currentUser: RequestUser,
     @Param('id') id: string,
@@ -102,12 +81,9 @@ export class UsersController {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // DELETE /users/:id — Soft delete
-  // ---------------------------------------------------------------------------
-
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.ADMIN)
   async remove(
     @CurrentUser() currentUser: RequestUser,
     @Param('id') id: string,
