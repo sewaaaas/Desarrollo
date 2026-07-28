@@ -233,7 +233,7 @@ model TicketHistory {
   ticket         Ticket              @relation(fields: [ticketId], references: [id])
   changedBy      User?               @relation("TicketHistoryChangedBy", fields: [changedById], references: [id])
 
-  @@index([ticketId], name: "idx_ticket_history_ticket_id")
+  @@index([organizationId, ticketId], name: "idx_ticket_history_org_ticket")
 
   @@map("ticket_history")
 }

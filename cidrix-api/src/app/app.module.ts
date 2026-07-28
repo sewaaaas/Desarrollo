@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { appConfig, validationSchema } from '@config/app.config';
 import { jwtConfig } from '@config/jwt.config';
@@ -10,6 +11,7 @@ import { DatabaseModule } from '@database/database.module';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { CategoriesModule } from '@modules/categories/categories.module';
+import { TicketsModule } from '@modules/tickets/tickets.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -24,10 +26,17 @@ import { HealthController } from './health.controller';
       },
       expandVariables: true,
     }),
+    EventEmitterModule.forRoot({
+      wildcard: false,
+      delimiter: '.',
+      maxListeners: 20,
+      verboseMemoryLeak: true,
+    }),
     DatabaseModule,
     AuthModule,
     UsersModule,
     CategoriesModule,
+    TicketsModule,
   ],
   controllers: [HealthController],
   providers: [
