@@ -61,6 +61,21 @@ export interface CommentAddedEvent extends BaseDomainEvent {
   isInternal: boolean;
 }
 
+/**
+ * BE-07 — Primera respuesta pública de TECHNICIAN/ADMIN sobre un ticket.
+ *
+ * Se emite únicamente cuando el update condicional sobre
+ * Ticket.firstResponseAt (WHERE firstResponseAt IS NULL) afectó una fila.
+ * `authorId` (no `technicianId`): un ADMIN también puede generar la primera
+ * respuesta, no solo un TECHNICIAN.
+ */
+export interface TicketFirstResponseEvent extends BaseDomainEvent {
+  ticketId: string;
+  authorId: string;
+  firstResponseAt: Date;
+  triggerCommentId: string;
+}
+
 // ---------------------------------------------------------------------------
 // SLA Events
 // ---------------------------------------------------------------------------
@@ -108,6 +123,10 @@ export const EVENTS = {
   TICKET_STATUS_CHANGED: 'ticket.status.changed',
   TICKET_CLOSED: 'ticket.closed',
   COMMENT_ADDED: 'comment.added',
+  // BE-07 — "comentario creado" reutiliza COMMENT_ADDED (ya existía desde
+  // BE-01 con el payload correcto). No se crea un COMMENT_CREATED paralelo
+  // para el mismo concepto — ver decisión técnica en el reporte de BE-07.
+  TICKET_FIRST_RESPONSE: 'ticket.first.response',
   SLA_WARNING: 'sla.warning',
   SLA_BREACHED: 'sla.breached',
   USER_CREATED: 'user.created',
