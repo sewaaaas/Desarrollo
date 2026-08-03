@@ -12,6 +12,7 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { CategoriesModule } from '@modules/categories/categories.module';
 import { TicketsModule } from '@modules/tickets/tickets.module';
+import { CommentsModule } from '@modules/comments/comments.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -37,6 +38,7 @@ import { HealthController } from './health.controller';
     UsersModule,
     CategoriesModule,
     TicketsModule,
+    CommentsModule,
   ],
   controllers: [HealthController],
   providers: [
