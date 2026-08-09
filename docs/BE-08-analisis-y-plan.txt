@@ -1,0 +1,601 @@
+CIDRIX — BE-08: LÍNEA DE TIEMPO UNIFICADA DEL TICKET
+INFORME DE ANÁLISIS Y PLAN DE IMPLEMENTACIÓN
+
+Fecha: 8 de agosto de 2026
+Repositorio: C:\Users\Sewas\proyecto
+Backend: C:\Users\Sewas\proyecto\cidrix-api
+Rama inspeccionada: main
+Commit inspeccionado: f2bed64
+Estado remoto: HEAD coincide con origin/main
+Estado del worktree durante la inspección: limpio
+
+IMPORTANTE
+----------
+
+Este documento corresponde únicamente a la fase de inspección y planificación.
+No se modificaron archivos del backend, no se creó ningún commit y no se hizo push.
+
+
+1. RESUMEN EJECUTIVO
+--------------------
+
+BE-08 es compatible en términos generales con la arquitectura y el modelo de datos
+actuales de CIDRIX. Comment y TicketHistory ya contienen la información necesaria
+para construir una línea de tiempo unificada exclusivamente en la capa de lectura.
+No se necesita una tabla nueva, una migración Prisma ni una dependencia adicional.
+
+La implementación puede reutilizar TicketsService.findOne() como fuente de verdad
+para el acceso de lectura al ticket. Después de esa validación, se consultarán
+Comment y TicketHistory con organizationId + ticketId, se transformarán a un DTO
+discriminado común, se ordenarán conjuntamente y solo entonces se aplicará la
+paginación.
+
+Existen dos decisiones que conviene confirmar antes de implementar:
+
+1) El proyecto no define qué campos de TicketHistory.changes deben considerarse
+   internos o sensibles para un USER. Es necesario establecer una política explícita
+   de sanitización.
+
+2) Los services paginados retornan { data, meta }, pero el interceptor global vuelve
+   a envolver el resultado. Por ello, la respuesta HTTP efectiva actual es
+   { data: { data, meta } }. BE-08 puede conservar el comportamiento real existente;
+   corregir el envelope global sería un cambio transversal separado.
+
+
+2. BASELINE VERIFICADO
+----------------------
+
+Versiones instaladas:
+
+- Node.js: 24.18.0
+- NestJS Core: 11.1.27
+- TypeScript: 5.8.3
+- Prisma CLI: 6.19.3
+- @prisma/client: 6.19.3
+- @nestjs/event-emitter: 3.1.0
+- class-validator: 0.14.4
+- class-transformer: 0.5.1
+
+Estas versiones son compatibles con el stack requerido en el encargo. No se propone
+actualizar ninguna de ellas.
+
+Pruebas ejecutadas sobre main antes de cualquier cambio:
+
+- Suites: 2 aprobadas de 2
+- Pruebas: 27 aprobadas de 27
+- Snapshots: 0
+- Comando: npm.cmd test -- --runInBand
+
+Las pruebas existentes cubren principalmente CommentsService y CreateCommentDto.
+Solo existe además un e2e básico de la aplicación. No se encontraron pruebas unitarias
+del módulo tickets, aunque un comentario del test de comments indica que dicho módulo
+tendría pruebas propias.
+
+
+3. IMPLEMENTACIÓN ACTUAL DE TICKETHISTORY
+-----------------------------------------
+
+Modelo real:
+
+- id: UUID String
+- ticketId: String
+- organizationId: String
+- changedById: String nullable
+- action: TicketHistoryAction
+- changes: Json nullable
+- occurredAt: DateTime con default now()
+
+Relaciones:
+
+- ticket: relación con Ticket usando ticketId
+- changedBy: relación opcional con User usando changedById
+
+Índice existente:
+
+- (organizationId, ticketId), llamado idx_ticket_history_org_ticket
+
+Acciones existentes:
+
+- CREATED
+- UPDATED
+- ASSIGNED
+- UNASSIGNED
+- STATUS_CHANGED
+- CANCELLED
+- CLOSED
+- FIRST_RESPONSE
+
+TicketHistory se escribe actualmente en estos flujos:
+
+- Creación del ticket: CREATED.
+- Edición del ticket: UPDATED.
+- Asignación o desasignación: ASSIGNED / UNASSIGNED.
+- Cambio de estado: STATUS_CHANGED / CANCELLED / CLOSED.
+- Primera respuesta pública válida: FIRST_RESPONSE.
+
+El campo changes sigue generalmente la forma:
+
+{
+  campo: {
+    from: valorAnterior,
+    to: valorNuevo
+  }
+}
+
+No existe actualmente ningún endpoint, service o repository para leer TicketHistory.
+Tampoco existe una política que filtre sus campos por rol.
+
+
+4. IMPLEMENTACIÓN ACTUAL DE COMMENT
+------------------------------------
+
+Modelo real:
+
+- id: UUID String
+- organizationId: String
+- ticketId: String
+- authorId: String
+- content: Text
+- visibility: PUBLIC o INTERNAL
+- createdAt: DateTime con default now()
+
+Comment es inmutable: no existen PATCH ni DELETE.
+
+Integridad multi-tenant:
+
+- Comment -> Ticket usa una FK compuesta por organizationId + ticketId.
+- Comment -> User/author usa una FK compuesta por organizationId + authorId.
+- La consulta siempre recibe organizationId y ticketId.
+
+Índices existentes y preparados por BE-07:
+
+- (organizationId, ticketId, createdAt, id)
+- (organizationId, ticketId, visibility, createdAt, id)
+
+Lectura actual:
+
+- GET /api/v1/tickets/:ticketId/comments
+- Reutiliza TicketsService.findOne() para validar tenant y acceso al ticket.
+- USER siempre queda restringido a PUBLIC, incluso si solicita INTERNAL en query.
+- TECHNICIAN y ADMIN pueden leer PUBLIC e INTERNAL.
+- El orden predeterminado es ascendente.
+- El orden estable usa createdAt + id.
+- La paginación es page/limit con máximo de 100.
+
+Escritura actual:
+
+- USER solo puede comentar sus propios tickets y únicamente con PUBLIC.
+- TECHNICIAN solo puede escribir en tickets asignados directamente a él.
+- ADMIN puede escribir en cualquier ticket de su organización.
+- No se permiten comentarios en tickets CLOSED o CANCELLED.
+
+Es importante distinguir que la regla de escritura del TECHNICIAN es más estricta
+que su regla de lectura.
+
+
+5. FIRST_RESPONSE
+-----------------
+
+FIRST_RESPONSE ya está implementado correctamente en BE-07.
+
+Cuando TECHNICIAN o ADMIN crea el primer comentario PUBLIC válido:
+
+1) Se crea Comment.
+2) Se actualiza Ticket.firstResponseAt mediante un update condicional que exige
+   firstResponseAt = null.
+3) Si esa transacción gana la carrera, se crea TicketHistory con acción
+   FIRST_RESPONSE.
+4) El occurredAt del historial coincide con createdAt del comentario.
+5) changes guarda firstResponseAt y triggerCommentId.
+
+Comment y FIRST_RESPONSE representan hechos diferentes:
+
+- Comment: mensaje enviado.
+- FIRST_RESPONSE: auditoría del cambio de firstResponseAt.
+
+Por ello, ambos deben poder aparecer en la línea de tiempo. BE-08 no debe crear
+ninguna entrada adicional ni intentar deduplicarlos.
+
+
+6. CONTROL DE ACCESO ACTUAL
+---------------------------
+
+Autenticación:
+
+- JwtAuthGuard valida el access token.
+- JwtStrategy construye RequestUser con id, email, role y organizationId.
+- RolesGuard valida los roles declarados con @Roles().
+- El JWT no provoca una lectura de usuario en base de datos en cada request.
+
+Alcance de lectura de TicketsService.findOne():
+
+- Toda búsqueda incluye id + organizationId.
+- Si el ticket no existe en la organización, responde 404.
+- USER solo puede leer tickets cuyo createdById coincide con su id; en caso
+  contrario responde 403.
+- TECHNICIAN puede leer cualquier ticket de su organización, aunque no esté
+  asignado a él.
+- ADMIN puede leer cualquier ticket de su organización.
+
+Consecuencia para BE-08:
+
+- USER: timeline únicamente de sus propios tickets.
+- TECHNICIAN: timeline de cualquier ticket que pueda leer dentro de su organización.
+- ADMIN: timeline completo de cualquier ticket de su organización.
+
+BE-08 no debe introducir una restricción nueva que obligue al TECHNICIAN a estar
+asignado para leer la línea de tiempo.
+
+
+7. MULTI-TENANCY
+----------------
+
+Toda consulta de BE-08 deberá incluir organizationId y ticketId. No será suficiente
+validar el ticket previamente y luego consultar las tablas únicamente por ticketId.
+
+Pipeline propuesto:
+
+1) Ejecutar TicketsService.findOne(currentUser, ticketId).
+2) Consultar Comment con:
+   organizationId = currentUser.organizationId
+   ticketId = parámetro de ruta
+   visibility dentro de las visibilidades permitidas
+3) Consultar TicketHistory con:
+   organizationId = currentUser.organizationId
+   ticketId = parámetro de ruta
+4) Resolver actores sin permitir datos de usuarios de otra organización.
+
+La relación TicketHistory.changedBy no usa actualmente una FK tenant-first compuesta.
+Para reforzar la condición de “bajo ninguna circunstancia”, se recomienda no confiar
+solo en esa relación al exponer el actor. Los actores del historial pueden resolverse
+mediante una consulta de User que también incluya organizationId.
+
+No se propone modificar el schema para este objetivo.
+
+
+8. DTO PROPUESTO
+----------------
+
+Se recomienda una unión discriminada para que el frontend identifique el tipo de
+elemento sin inferirlo por campos nullable.
+
+DTO común del actor:
+
+TimelineActorDto
+{
+  id: string;
+  name: string;
+  role: UserRole;
+}
+
+Elemento de comentario:
+
+TicketTimelineCommentItemDto
+{
+  id: string;
+  type: 'COMMENT';
+  timestamp: Date;
+  actor: TimelineActorDto;
+  content: string;
+  visibility: CommentVisibility;
+}
+
+Elemento de historial:
+
+TicketTimelineHistoryItemDto
+{
+  id: string;
+  type: 'HISTORY';
+  timestamp: Date;
+  actor: TimelineActorDto | null;
+  action: TicketHistoryAction;
+  changes: Record<string, { from: unknown; to: unknown }> | null;
+}
+
+Unión:
+
+type TicketTimelineItemDto =
+  | TicketTimelineCommentItemDto
+  | TicketTimelineHistoryItemDto;
+
+Respuesta paginada interna del service:
+
+PaginatedTicketTimelineDto
+{
+  data: TicketTimelineItemDto[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+No se incluye ticketId en cada elemento porque ya está determinado por el parámetro
+de ruta. Si el frontend necesita elementos globalmente direccionables, puede formar
+una clave con type + id, ya que los ids proceden de tablas distintas.
+
+
+9. ORDEN PROPUESTO
+------------------
+
+Orden predeterminado recomendado: ascendente.
+
+Motivos:
+
+- Una línea de tiempo narrativa se consume naturalmente desde el evento inicial
+  hasta el más reciente.
+- CommentFiltersDto ya usa ASC como valor predeterminado.
+- Permite ver el comentario que dispara FIRST_RESPONSE inmediatamente antes del
+  evento de auditoría cuando ambos tienen el mismo timestamp.
+
+Orden determinista propuesto:
+
+1) timestamp
+2) prioridad estable de tipo de fuente
+3) id
+
+Prioridad en caso de timestamp idéntico:
+
+- COMMENT antes que HISTORY.
+
+El id actúa como último desempate. No se debe ordenar únicamente por timestamp.
+
+Query DTO propuesto:
+
+- page: entero, mínimo 1, default 1.
+- limit: entero, mínimo 1, máximo 100, default 20.
+- order: asc o desc, default asc, reutilizando SortOrder existente.
+
+
+10. PAGINACIÓN COMBINADA
+------------------------
+
+No se debe paginar Comment y TicketHistory de manera independiente y después unir
+ambas páginas. Eso produce resultados incompletos y totales incorrectos.
+
+Solución recomendada para el volumen esperado del MVP:
+
+1) Obtener todos los Comment visibles del ticket.
+2) Obtener todos los TicketHistory visibles del ticket.
+3) Transformar ambos conjuntos al DTO uniforme.
+4) Unirlos.
+5) Ordenar el conjunto completo con el criterio determinista.
+6) Calcular total sobre el conjunto combinado.
+7) Aplicar skip/slice una sola vez sobre el conjunto combinado.
+
+Ventajas:
+
+- Corrección simple y fácil de probar.
+- No requiere SQL crudo con UNION ALL.
+- No requiere nuevas dependencias ni infraestructura.
+- Reutiliza los índices ya existentes para restringir por tenant y ticket.
+
+Limitación aceptada para el MVP:
+
+- Se cargan todos los elementos visibles del ticket antes de paginar.
+
+Si en el futuro el volumen por ticket creciera significativamente, se podría migrar
+a un UNION ALL paginado en PostgreSQL o a paginación por cursor. Ese cambio no es
+necesario para BE-08.
+
+
+11. ARQUITECTURA PROPUESTA
+--------------------------
+
+Endpoint:
+
+GET /api/v1/tickets/:ticketId/history
+
+Controller:
+
+- Añadir una acción delgada al TicketsController.
+- Protegerla con JwtAuthGuard, RolesGuard y los roles ADMIN, TECHNICIAN y USER.
+- Delegar toda la lógica a un service.
+
+Service:
+
+- Crear un servicio de lectura específico para la línea de tiempo dentro del módulo
+  tickets.
+- Inyectar TicketsService para reutilizar findOne().
+- Inyectar PrismaService para las lecturas combinadas.
+- Mantener allí visibilidad, sanitización, transformación, orden y paginación.
+
+No se recomienda reutilizar CommentsRepository.findManyForTicket() porque dicho
+método ya pagina Comment de forma independiente, lo cual no sirve para la paginación
+combinada. Tampoco parece necesario crear un repository nuevo: TicketsService ya
+establece el patrón de usar PrismaService directamente para lecturas de tickets.
+
+Cambios de módulo:
+
+- Registrar el servicio de timeline como provider de TicketsModule.
+- No modificar CommentsModule salvo que durante la implementación aparezca una
+  reutilización segura que no altere BE-07.
+
+Schema y migraciones:
+
+- No se requiere cambiar schema.prisma.
+- No se requiere crear una migración.
+- No se requiere crear índices adicionales para el MVP.
+
+
+12. VISIBILIDAD PROPUESTA
+-------------------------
+
+Comentarios:
+
+- USER: solamente PUBLIC, sin excepción.
+- TECHNICIAN: PUBLIC e INTERNAL en tickets que pueda leer.
+- ADMIN: PUBLIC e INTERNAL en tickets de su organización.
+
+Historial:
+
+- TECHNICIAN y ADMIN: acciones y changes completos.
+- USER: acciones apropiadas para el usuario final y changes sanitizado mediante una
+  lista pública explícita.
+
+Problema pendiente:
+
+El código actual no tiene un indicador “internal” en TicketHistory ni una policy que
+clasifique cada campo. Por tanto, no es posible “respetar exactamente” una regla
+existente: esa regla aún no existe.
+
+Recomendación:
+
+- Definir una lista permitida por acción o, como mínimo, una lista permitida global
+  de campos de changes para USER.
+- Omitir triggerCommentId para USER porque es un detalle técnico de auditoría.
+- No basarse en una blacklist abierta, ya que campos nuevos podrían filtrarse por
+  accidente en el futuro.
+
+Posible lista pública inicial, sujeta a aprobación del Tech Lead:
+
+- title
+- description
+- priority
+- status
+- categoryId
+- assignedToId
+- firstResponseAt
+
+Aunque assignedToId y categoryId ya son visibles indirectamente en TicketResponse,
+el Tech Lead debe confirmar si desea exponer ids crudos en el historial o si prefiere
+una representación transformada. No se debe inventar esa decisión durante la
+implementación.
+
+
+13. RESPONSE ENVELOPE
+---------------------
+
+Patrón declarado:
+
+{ data: T, meta?: PaginationMeta }
+
+Patrón usado por los services paginados:
+
+{
+  data: [...],
+  meta: {...}
+}
+
+Comportamiento real del ResponseInterceptor:
+
+El interceptor aplica siempre:
+
+map(data => ({ data }))
+
+Por tanto, una respuesta paginada se convierte en:
+
+{
+  data: {
+    data: [...],
+    meta: {...}
+  }
+}
+
+Esto no es específico de BE-08; afecta a tickets, comentarios, usuarios y categorías.
+
+Recomendación para este alcance:
+
+- Mantener el patrón real existente en BE-08 para no introducir una respuesta
+  diferente únicamente en este endpoint.
+- Registrar la corrección del interceptor/envelope como una tarea transversal
+  separada si se desea que meta quede realmente en el nivel superior.
+
+
+14. PRUEBAS PROPUESTAS
+----------------------
+
+Crear pruebas unitarias del servicio de timeline con PrismaService y TicketsService
+mockeados. Cubrir como mínimo:
+
+1) ADMIN obtiene Comment PUBLIC + INTERNAL + TicketHistory.
+2) TECHNICIAN autorizado obtiene el timeline.
+3) TECHNICIAN conserva su alcance real de lectura de toda la organización, aunque
+   el ticket no esté asignado.
+4) USER obtiene Comment PUBLIC.
+5) USER nunca obtiene Comment INTERNAL, aunque exista en base de datos.
+6) USER no puede consultar el ticket de otro usuario.
+7) Un ticket de otra organización se trata como inexistente y no se consulta su
+   timeline.
+8) Todas las consultas reciben organizationId y ticketId.
+9) Comment y TicketHistory se combinan correctamente.
+10) El orden es determinista cuando los timestamps son diferentes.
+11) El orden es determinista cuando los timestamps son idénticos.
+12) La paginación se aplica al conjunto combinado, no por tabla.
+13) total y totalPages se calculan sobre el conjunto combinado.
+14) Ticket inexistente produce 404.
+15) Timeline vacío devuelve data vacío y meta coherente.
+16) FIRST_RESPONSE y el Comment que lo originó aparecen como dos elementos distintos.
+17) No se crea ni modifica ningún registro durante la lectura.
+18) USER recibe changes sanitizado conforme a la policy aprobada.
+19) Un changedBy de otra organización no produce fuga de datos de actor.
+
+También conviene añadir pruebas del DTO de filtros para page, limit y order.
+
+
+15. ARCHIVOS PREVISTOS
+----------------------
+
+La implementación probablemente afectará únicamente archivos equivalentes a:
+
+- src/modules/tickets/tickets.controller.ts
+- src/modules/tickets/tickets.module.ts
+- src/modules/tickets/ticket-timeline.service.ts
+- src/modules/tickets/dto/ticket-timeline-filters.dto.ts
+- src/modules/tickets/dto/ticket-timeline-response.dto.ts
+- src/modules/tickets/__tests__/ticket-timeline.service.spec.ts
+- src/modules/tickets/__tests__/ticket-timeline-filters.dto.spec.ts, si se separa
+
+La nomenclatura final puede ajustarse a las convenciones del módulo al implementar.
+
+
+16. RIESGOS Y DECISIONES PENDIENTES
+-----------------------------------
+
+DECISIÓN 1 — Policy de TicketHistory para USER
+
+Confirmar qué campos de changes son públicos. La recomendación es una allowlist
+explícita y omitir triggerCommentId.
+
+DECISIÓN 2 — Envelope HTTP
+
+Confirmar que BE-08 debe conservar el envelope efectivo actual
+{ data: { data, meta } }. La recomendación es no corregir el interceptor como parte
+de BE-08.
+
+DECISIÓN 3 — Identificadores en historial
+
+Confirmar si assignedToId y categoryId pueden exponerse como ids crudos a USER o si
+deben transformarse a datos descriptivos. El código actual de TicketResponse ya
+expone ids y nombres, pero TicketHistory solo almacena ids.
+
+
+17. PLAN DE EJECUCIÓN TRAS LA APROBACIÓN
+----------------------------------------
+
+1) Crear DTOs de filtros y respuesta.
+2) Implementar el servicio de timeline reutilizando TicketsService.findOne().
+3) Aplicar filtros multi-tenant y visibilidad por rol en cada consulta.
+4) Implementar la policy aprobada para TicketHistory de USER.
+5) Transformar Comment y TicketHistory al DTO discriminado.
+6) Implementar orden conjunto determinista.
+7) Implementar paginación después de combinar.
+8) Exponer el endpoint desde TicketsController.
+9) Registrar el servicio en TicketsModule.
+10) Añadir todas las pruebas requeridas.
+11) Ejecutar tests, lint sin cambios automáticos no deseados y build.
+12) Revisar git diff y entregar el resultado sin commit ni push.
+
+
+18. CONCLUSIÓN
+--------------
+
+BE-08 puede implementarse sin alterar el modelo de datos ni BE-07. El diseño más
+seguro para el MVP es una proyección de lectura que reutilice el control de acceso
+actual, filtre cada consulta por organización, combine ambos orígenes en memoria y
+aplique orden y paginación una sola vez.
+
+Antes de comenzar, el Tech Lead debe aprobar o ajustar la policy de visibilidad de
+TicketHistory.changes para USER. También debe confirmar si se conserva el envelope
+HTTP efectivo actual o si su corrección se tratará como una tarea independiente.

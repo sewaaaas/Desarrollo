@@ -15,7 +15,13 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { TicketFiltersDto } from './dto/ticket-filters.dto';
-import { TicketResponseDto, PaginatedTicketsDto } from './dto/ticket-response.dto';
+import {
+  TicketResponseDto,
+  PaginatedTicketsDto,
+} from './dto/ticket-response.dto';
+import { TicketTimelineFiltersDto } from './dto/ticket-timeline-filters.dto';
+import { PaginatedTicketTimelineDto } from './dto/ticket-timeline-response.dto';
+import { TicketTimelineService } from './ticket-timeline.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
 import { Roles } from '@common/decorators/roles.decorator';
@@ -36,7 +42,10 @@ import { RequestUser } from '@modules/auth/types/jwt-payload.type';
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(
+    private readonly ticketsService: TicketsService,
+    private readonly ticketTimelineService: TicketTimelineService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // POST /tickets — Crear ticket
@@ -62,6 +71,20 @@ export class TicketsController {
     @Query() filters: TicketFiltersDto,
   ): Promise<PaginatedTicketsDto> {
     return this.ticketsService.findAll(currentUser, filters);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /tickets/:ticketId/history — Timeline unificado
+  // ---------------------------------------------------------------------------
+
+  @Get(':ticketId/history')
+  @Roles(UserRole.ADMIN, UserRole.TECHNICIAN, UserRole.USER)
+  async findHistory(
+    @CurrentUser() currentUser: RequestUser,
+    @Param('ticketId') ticketId: string,
+    @Query() filters: TicketTimelineFiltersDto,
+  ): Promise<PaginatedTicketTimelineDto> {
+    return this.ticketTimelineService.findAll(currentUser, ticketId, filters);
   }
 
   // ---------------------------------------------------------------------------
