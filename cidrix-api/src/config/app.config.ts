@@ -10,17 +10,16 @@ export interface AppConfig {
   bcryptSaltRounds: number;
 }
 
-export const appConfig = registerAs(
-  'app',
-  (): AppConfig => ({
-    nodeEnv: process.env['NODE_ENV'] ?? 'development',
-    port: parseInt(process.env['PORT'] ?? '3000', 10),
-    apiPrefix: process.env['API_PREFIX'] ?? 'api/v1',
-    version: process.env['APP_VERSION'] ?? '1.0.0',
-    corsOrigins: (process.env['CORS_ORIGINS'] ?? 'http://localhost:5173').split(','),
-    bcryptSaltRounds: parseInt(process.env['BCRYPT_SALT_ROUNDS'] ?? '10', 10),
-  }),
-);
+export const appConfig = registerAs('app', (): AppConfig => ({
+  nodeEnv: process.env['NODE_ENV'] ?? 'development',
+  port: parseInt(process.env['PORT'] ?? '3000', 10),
+  apiPrefix: process.env['API_PREFIX'] ?? 'api/v1',
+  version: process.env['APP_VERSION'] ?? '1.0.0',
+  corsOrigins: (process.env['CORS_ORIGINS'] ?? 'http://localhost:5173').split(
+    ',',
+  ),
+  bcryptSaltRounds: parseInt(process.env['BCRYPT_SALT_ROUNDS'] ?? '10', 10),
+}));
 
 export const validationSchema = Joi.object({
   NODE_ENV: Joi.string()
@@ -44,4 +43,19 @@ export const validationSchema = Joi.object({
   // Storage — Sprint 3
   STORAGE_DRIVER: Joi.string().valid('local', 's3').default('local'),
   STORAGE_LOCAL_PATH: Joi.string().default('./uploads'),
+  ATTACHMENT_MAX_FILE_SIZE_BYTES: Joi.number()
+    .integer()
+    .min(1)
+    .max(10_485_760)
+    .default(10_485_760),
+  ATTACHMENT_MAX_FILES_PER_TICKET: Joi.number()
+    .integer()
+    .min(1)
+    .max(20)
+    .default(20),
+  ATTACHMENT_MAX_TOTAL_SIZE_PER_TICKET_BYTES: Joi.number()
+    .integer()
+    .min(1)
+    .max(104_857_600)
+    .default(104_857_600),
 });
