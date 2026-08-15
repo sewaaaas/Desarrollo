@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { appConfig, validationSchema } from '@config/app.config';
 import { jwtConfig } from '@config/jwt.config';
+import { storageConfig } from '@config/storage.config';
 import { HttpExceptionFilter } from '@common/filters/http-exception.filter';
 import { ResponseInterceptor } from '@common/interceptors/response.interceptor';
 import { DatabaseModule } from '@database/database.module';
@@ -13,13 +14,14 @@ import { UsersModule } from '@modules/users/users.module';
 import { CategoriesModule } from '@modules/categories/categories.module';
 import { TicketsModule } from '@modules/tickets/tickets.module';
 import { CommentsModule } from '@modules/comments/comments.module';
+import { AttachmentsModule } from '@modules/attachments/attachments.module';
 import { HealthController } from './health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, jwtConfig],
+      load: [appConfig, jwtConfig, storageConfig],
       validationSchema,
       validationOptions: {
         allowUnknown: true,
@@ -39,6 +41,7 @@ import { HealthController } from './health.controller';
     CategoriesModule,
     TicketsModule,
     CommentsModule,
+    AttachmentsModule,
   ],
   controllers: [HealthController],
   providers: [
