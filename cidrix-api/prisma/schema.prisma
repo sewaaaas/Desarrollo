@@ -36,6 +36,12 @@ enum UserStatus {
   DELETED
 }
 
+enum NotificationType {
+  TICKET_ASSIGNED
+  TICKET_STATUS_CHANGED
+  COMMENT_ADDED
+}
+
 // =============================================================================
 // MODELS
 // =============================================================================
@@ -62,6 +68,7 @@ model Organization {
   ticketCounters TicketCounter[]
   comments       Comment[]
   attachments    Attachment[]
+  notifications  Notification[]
 
   @@map("organizations")
 }
@@ -85,13 +92,14 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
   // Relaciones
-  organization        Organization    @relation(fields: [organizationId], references: [id])
-  ticketsCreated      Ticket[]        @relation("TicketCreatedBy")
-  ticketsAssigned     Ticket[]        @relation("TicketAssignedTo")
-  ticketHistory       TicketHistory[] @relation("TicketHistoryChangedBy")
-  comments            Comment[]
-  attachmentsUploaded Attachment[]    @relation("AttachmentUploadedBy")
-  attachmentsDeleted  Attachment[]    @relation("AttachmentDeletedBy")
+  organization          Organization    @relation(fields: [organizationId], references: [id])
+  ticketsCreated        Ticket[]        @relation("TicketCreatedBy")
+  ticketsAssigned       Ticket[]        @relation("TicketAssignedTo")
+  ticketHistory         TicketHistory[] @relation("TicketHistoryChangedBy")
+  comments              Comment[]
+  attachmentsUploaded   Attachment[]    @relation("AttachmentUploadedBy")
+  attachmentsDeleted    Attachment[]    @relation("AttachmentDeletedBy")
+  notificationsReceived Notification[]  @relation("NotificationRecipient")
 
   // Índices
   @@unique([organizationId, email], name: "uq_users_org_email")
@@ -216,13 +224,14 @@ model Ticket {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  organization Organization    @relation(fields: [organizationId], references: [id])
-  createdBy    User            @relation("TicketCreatedBy", fields: [createdById], references: [id])
-  assignedTo   User?           @relation("TicketAssignedTo", fields: [assignedToId], references: [id])
-  category     Category?       @relation(fields: [categoryId], references: [id])
-  history      TicketHistory[]
-  comments     Comment[]
-  attachments  Attachment[]
+  organization  Organization    @relation(fields: [organizationId], references: [id])
+  createdBy     User            @relation("TicketCreatedBy", fields: [createdById], references: [id])
+  assignedTo    User?           @relation("TicketAssignedTo", fields: [assignedToId], references: [id])
+  category      Category?       @relation(fields: [categoryId], references: [id])
+  history       TicketHistory[]
+  comments      Comment[]
+  attachments   Attachment[]
+  notifications Notification[]
 
   @@unique([organizationId, number], name: "uq_tickets_org_number")
   /// BE-07 — habilita la FK compuesta tenant-first de Comment.ticket.
@@ -327,4 +336,29 @@ model Attachment {
   @@index([organizationId, ticketId, visibility, deletedAt, createdAt, id], name: "idx_attachments_org_ticket_visibility_created")
   @@index([organizationId, commentId, deletedAt, createdAt, id], name: "idx_attachments_org_comment_created")
   @@map("attachments")
+}
+
+// =============================================================================
+// MODELS — Notifications
+// Sprint: BE-11
+// =============================================================================
+
+model Notification {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  userId         String           @map("user_id")
+  ticketId       String           @map("ticket_id")
+  type           NotificationType
+  title          String           @db.VarChar(160)
+  message        String           @db.VarChar(500)
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  recipient    User         @relation("NotificationRecipient", fields: [organizationId, userId], references: [organizationId, id], onDelete: Restrict)
+  ticket       Ticket       @relation(fields: [organizationId, ticketId], references: [organizationId, id], onDelete: Restrict)
+
+  @@index([organizationId, userId, createdAt, id], name: "idx_notifications_org_user_created")
+  @@index([organizationId, userId, readAt, createdAt, id], name: "idx_notifications_org_user_read_created")
+  @@map("notifications")
 }

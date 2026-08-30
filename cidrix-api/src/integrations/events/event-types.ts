@@ -32,7 +32,7 @@ export interface TicketCreatedEvent extends BaseDomainEvent {
 
 export interface TicketAssignedEvent extends BaseDomainEvent {
   ticketId: string;
-  assignedTo: string;
+  assignedTo: string | null;
   assignedBy: string;
   previousAssignee: string | null;
 }
