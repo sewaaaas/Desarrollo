@@ -16,6 +16,7 @@ import { TicketsModule } from '@modules/tickets/tickets.module';
 import { CommentsModule } from '@modules/comments/comments.module';
 import { AttachmentsModule } from '@modules/attachments/attachments.module';
 import { DashboardModule } from '@modules/dashboard/dashboard.module';
+import { NotificationsModule } from '@modules/notifications/notifications.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -44,6 +45,7 @@ import { HealthController } from './health.controller';
     CommentsModule,
     AttachmentsModule,
     DashboardModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [
