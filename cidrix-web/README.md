@@ -1,32 +1,60 @@
-# React + TypeScript + Vite
+# CIDRIX Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend de CIDRIX, plataforma multi-tenant para gestión de soporte técnico. La aplicación usa React 19, Vite, TypeScript 5.8, Tailwind CSS y una arquitectura Feature-First.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 24
+- npm 11
+- CIDRIX API disponible
 
-## React Compiler
+## Instalación
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+Copy-Item .env.example .env.local
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+En shells distintos de PowerShell, copia `.env.example` a `.env.local` con el comando equivalente.
+
+## Variables de entorno
+
+```env
+VITE_API_URL=http://localhost:3000/api/v1
+```
+
+La aplicación valida la URL al iniciar. Las variables `VITE_*` son públicas en el bundle y nunca deben contener secretos.
+
+## Comandos
+
+```bash
+npm run dev
+npm run lint
+npm run typecheck
+npm test
+npm run test:watch
+npm run build
+npm run preview
+```
+
+## Estructura
+
+```text
+src/
+├── app/       # composición global, layouts, routing y boundaries
+├── features/  # funcionalidad agrupada por dominio
+├── shared/    # componentes, configuración, servicios y tipos reutilizables
+├── styles/    # estilos globales y tokens semánticos
+└── test/      # setup común de pruebas
+```
+
+Reglas principales:
+
+- `app` puede importar desde `features` y `shared`.
+- `features` puede importar desde `shared`.
+- `shared` no importa desde `app` ni `features`.
+- Una feature no consume internals de otra feature.
+- La autorización y el aislamiento tenant siempre son responsabilidad final del backend.
+
+FE-01 solo contiene infraestructura y páginas placeholder. Auth, Tickets, Dashboard, Notifications y Settings se implementan en sus fases correspondientes.
