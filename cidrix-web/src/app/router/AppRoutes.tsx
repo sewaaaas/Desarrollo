@@ -9,7 +9,7 @@ import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { NotificationsPlaceholderPage } from '@/features/notifications/pages/NotificationsPlaceholderPage'
 import { SettingsPlaceholderPage } from '@/features/settings/pages/SettingsPlaceholderPage'
 import { TicketDetailPlaceholderPage } from '@/features/tickets/pages/TicketDetailPlaceholderPage'
-import { TicketsPlaceholderPage } from '@/features/tickets/pages/TicketsPlaceholderPage'
+import { TicketsPage } from '@/features/tickets/pages/TicketsPage'
 import { Card } from '@/shared/components/Card'
 import { PageContainer } from '@/shared/components/PageContainer'
 
@@ -47,7 +47,7 @@ export function AppRoutes() {
           <Route element={<RoleRoute allowedRoles={['ADMIN', 'TECHNICIAN']} />}>
             <Route element={<DashboardPlaceholderPage />} path="/dashboard" />
           </Route>
-          <Route element={<TicketsPlaceholderPage />} path="/tickets" />
+          <Route element={<TicketsPage />} path="/tickets" />
           <Route
             element={<TicketDetailPlaceholderPage />}
             path="/tickets/:id"
