@@ -174,16 +174,17 @@ export class TicketsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = { organizationId };
 
-    // USER solo ve sus propios tickets
+    // El scope de autorización del USER siempre tiene precedencia sobre filtros del cliente.
     if (role === UserRole.USER) {
       where['createdById'] = userId;
+    } else if (filters.createdById) {
+      where['createdById'] = filters.createdById;
     }
 
     if (filters.status)       where['status']       = filters.status;
     if (filters.priority)     where['priority']     = filters.priority;
     if (filters.categoryId)   where['categoryId']   = filters.categoryId;
     if (filters.assignedToId) where['assignedToId'] = filters.assignedToId;
-    if (filters.createdById)  where['createdById']  = filters.createdById;
 
     if (filters.dateFrom || filters.dateTo) {
       where['createdAt'] = {
