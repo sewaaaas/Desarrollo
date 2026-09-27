@@ -2,13 +2,35 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { AppRoutes } from '@/app/router/AppRoutes'
-import { AuthContext } from '@/features/auth/context/auth-context'
+import {
+  AuthContext,
+  AuthenticatedApiContext,
+} from '@/features/auth/context/auth-context'
 import type {
   AuthContextValue,
   AuthState,
   AuthUser,
   UserRole,
 } from '@/features/auth/model/auth.types'
+import type { ApiClient } from '@/shared/services/api/api-client'
+
+const testApiClient: ApiClient = {
+  request: vi.fn().mockImplementation((path: string) => {
+    if (path.startsWith('tickets?')) {
+      return Promise.resolve({
+        data: [],
+        meta: { limit: 20, page: 1, total: 0, totalPages: 0 },
+      })
+    }
+    if (path.startsWith('categories?') || path.startsWith('users?')) {
+      return Promise.resolve({
+        data: [],
+        meta: { limit: 100, page: 1, total: 0, totalPages: 0 },
+      })
+    }
+    return Promise.resolve(undefined)
+  }),
+}
 
 function createUser(role: UserRole): AuthUser {
   return {
@@ -42,9 +64,11 @@ function renderRoute(
 
   render(
     <AuthContext.Provider value={contextValue}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <AppRoutes />
-      </MemoryRouter>
+      <AuthenticatedApiContext.Provider value={testApiClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AuthenticatedApiContext.Provider>
     </AuthContext.Provider>,
   )
 

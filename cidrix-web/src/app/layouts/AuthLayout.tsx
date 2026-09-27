@@ -16,7 +16,7 @@ export function AuthLayout() {
           </span>
           <span>Términos de servicio</span>
         </p>
-        <p>Copyright © CIDRIX 2023</p>
+        <p>Copyright © CIDRIX 2026</p>
       </footer>
     </div>
   )
