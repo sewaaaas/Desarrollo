@@ -122,6 +122,42 @@ describe('apiClient', () => {
       .toBeUndefined()
   })
 
+  it('returns a Blob without attempting to unwrap JSON', async () => {
+    const file = new Blob(['cidrix'], { type: 'text/plain' })
+    const fetchImplementation = vi.fn<typeof fetch>()
+    fetchImplementation.mockResolvedValue(new Response(file, { status: 200 }))
+    const client = createApiClient({
+      baseUrl: 'https://api.cidrix.example/api/v1',
+      fetchImplementation,
+    })
+
+    const result = await client.request<Blob>('tickets/ticket-1/attachments/file/download', {
+      responseType: 'blob',
+    })
+
+    expect(result).toBeInstanceOf(Blob)
+    expect(result.size).toBeGreaterThan(0)
+    const headers = new Headers(fetchImplementation.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('Accept')).toBe('*/*')
+  })
+
+  it('still maps a JSON error when a Blob request fails', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>()
+    fetchImplementation.mockResolvedValue(
+      jsonResponse({ error: { code: 'FORBIDDEN', message: 'Sin acceso' } }, 403),
+    )
+    const client = createApiClient({
+      baseUrl: 'https://api.cidrix.example/api/v1',
+      fetchImplementation,
+    })
+
+    await expect(
+      client.request<Blob>('tickets/ticket-1/attachments/file/download', {
+        responseType: 'blob',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 })
+  })
+
   it('maps the backend error envelope to ApiError', async () => {
     const fetchImplementation = vi.fn<typeof fetch>()
     fetchImplementation.mockResolvedValue(
