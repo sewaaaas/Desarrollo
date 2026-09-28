@@ -75,6 +75,34 @@ describe('ticketsApi', () => {
     )
   })
 
+  it('envía version en las mutaciones y pagina el timeline descendente', async () => {
+    const { api, request } = setup()
+    request.mockResolvedValue({})
+
+    await api.update('ticket/1', { title: 'Nuevo', version: 3 })
+    await api.assign('ticket/1', { assignedToId: null, version: 4 })
+    await api.updateStatus('ticket/1', { status: 'RESOLVED', version: 5 })
+    await api.getTimeline('ticket/1', 2)
+
+    expect(request).toHaveBeenNthCalledWith(1, 'tickets/ticket%2F1', {
+      json: { title: 'Nuevo', version: 3 },
+      method: 'PATCH',
+    })
+    expect(request).toHaveBeenNthCalledWith(2, 'tickets/ticket%2F1/assign', {
+      json: { assignedToId: null, version: 4 },
+      method: 'PATCH',
+    })
+    expect(request).toHaveBeenNthCalledWith(3, 'tickets/ticket%2F1/status', {
+      json: { status: 'RESOLVED', version: 5 },
+      method: 'PATCH',
+    })
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      'tickets/ticket%2F1/history?page=2&limit=20&order=desc',
+      { signal: undefined },
+    )
+  })
+
   it('propaga errores de la fachada autenticada sin reinterpretarlos', async () => {
     const { api, request } = setup()
     const error = new Error('fallo de sesión')

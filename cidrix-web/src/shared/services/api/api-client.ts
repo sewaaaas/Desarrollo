@@ -10,6 +10,7 @@ interface ApiRequestBaseOptions {
   accessToken?: string
   headers?: HeadersInit
   method?: HttpMethod
+  responseType?: 'json' | 'blob'
   signal?: AbortSignal
 }
 
@@ -106,7 +107,10 @@ export function createApiClient(
   return {
     async request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
       const headers = new Headers(options.headers)
-      headers.set('Accept', 'application/json')
+      headers.set(
+        'Accept',
+        options.responseType === 'blob' ? '*/*' : 'application/json',
+      )
 
       if (options.accessToken?.trim()) {
         headers.set('Authorization', `Bearer ${options.accessToken.trim()}`)
@@ -157,6 +161,10 @@ export function createApiClient(
 
       if (response.status === 204) {
         return undefined as T
+      }
+
+      if (response.ok && options.responseType === 'blob') {
+        return (await response.blob()) as T
       }
 
       const payload = await readJson(response)

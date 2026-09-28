@@ -28,6 +28,32 @@ const testApiClient: ApiClient = {
         meta: { limit: 100, page: 1, total: 0, totalPages: 0 },
       })
     }
+    if (path.includes('/history') || path.includes('/attachments')) {
+      return Promise.resolve({
+        data: [],
+        meta: { limit: 20, page: 1, total: 0, totalPages: 0 },
+      })
+    }
+    if (/^tickets\/[^/]+$/.test(path)) {
+      const id = decodeURIComponent(path.slice('tickets/'.length))
+      return Promise.resolve({
+        assignedTo: null,
+        category: null,
+        closedAt: null,
+        createdAt: '2026-09-27T10:00:00.000Z',
+        createdBy: { avatarUrl: null, fullName: 'USER CIDRIX', id: 'user-USER' },
+        description: 'Descripción suficientemente detallada.',
+        firstResponseAt: null,
+        id,
+        priority: 'MEDIUM',
+        resolvedAt: null,
+        status: 'OPEN',
+        ticketNumber: 'TKT-0042',
+        title: 'Detalle cargado',
+        updatedAt: '2026-09-27T10:00:00.000Z',
+        version: 1,
+      })
+    }
     return Promise.resolve(undefined)
   }),
 }
@@ -161,17 +187,14 @@ describe('AppRoutes', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('restaura un destino interno con path, query y hash', () => {
+  it('restaura un destino interno con path, query y hash', async () => {
     renderRoute(
       '/login',
       { status: 'authenticated', user: createUser('USER') },
       { from: '/tickets/ticket-42?tab=history#comment-2' },
     )
 
-    expect(
-      screen.getByRole('heading', { name: 'Detalle del ticket' }),
-    ).toBeVisible()
-    expect(screen.getByText('ticket-42')).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Detalle cargado' })).toBeVisible()
   })
 
   it('descarta un destino externo y usa una ruta segura', () => {
@@ -196,18 +219,13 @@ describe('AppRoutes', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('resuelve una ruta dinámica de ticket sin loops', () => {
+  it('resuelve una ruta dinámica de ticket sin loops', async () => {
     renderRoute('/tickets/4b980ba5-34d7-4fe6-a2f7-430a773f5331', {
       status: 'authenticated',
       user: createUser('TECHNICIAN'),
     })
 
-    expect(
-      screen.getByRole('heading', { name: 'Detalle del ticket' }),
-    ).toBeVisible()
-    expect(
-      screen.getByText('4b980ba5-34d7-4fe6-a2f7-430a773f5331'),
-    ).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Detalle cargado' })).toBeVisible()
   })
 
   it('mantiene una página 404 segura para rutas desconocidas', () => {

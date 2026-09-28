@@ -1,4 +1,5 @@
 import type { Paginated } from '@/shared/services/api/api.types'
+import type { UserRole } from '@/features/auth/model/auth.types'
 
 export type TicketStatus =
   | 'OPEN'
@@ -90,3 +91,78 @@ export interface TicketOptionUser {
 
 export type PaginatedTicketCategories = Paginated<TicketOptionCategory>
 export type PaginatedTicketUsers = Paginated<TicketOptionUser>
+
+export type CommentVisibility = 'PUBLIC' | 'INTERNAL'
+
+export type TicketHistoryAction =
+  | 'CREATED'
+  | 'UPDATED'
+  | 'ASSIGNED'
+  | 'UNASSIGNED'
+  | 'STATUS_CHANGED'
+  | 'CANCELLED'
+  | 'CLOSED'
+  | 'FIRST_RESPONSE'
+
+export interface TimelineActor {
+  id: string
+  name: string
+  role: UserRole
+}
+
+export type TimelineItem =
+  | {
+      id: string
+      type: 'COMMENT'
+      timestamp: string
+      actor: TimelineActor
+      content: string
+      visibility: CommentVisibility
+    }
+  | {
+      id: string
+      type: 'HISTORY'
+      timestamp: string
+      actor: TimelineActor | null
+      action: TicketHistoryAction
+      changes: unknown | null
+    }
+
+export type PaginatedTimeline = Paginated<TimelineItem>
+
+export interface UpdateTicketInput {
+  title?: string
+  description?: string
+  priority?: TicketPriority
+  categoryId?: string | null
+  version: number
+}
+
+export interface AssignTicketInput {
+  assignedToId: string | null
+  version: number
+}
+
+export interface UpdateTicketStatusInput {
+  status: TicketStatus
+  version: number
+}
+
+export interface CreateCommentInput {
+  content: string
+  visibility: CommentVisibility
+}
+
+export interface Attachment {
+  id: string
+  ticketId: string
+  commentId: string | null
+  originalName: string
+  mimeType: string
+  sizeBytes: number
+  visibility: CommentVisibility
+  uploadedBy: TimelineActor
+  createdAt: string
+}
+
+export type PaginatedAttachments = Paginated<Attachment>
