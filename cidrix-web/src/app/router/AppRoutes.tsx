@@ -4,7 +4,7 @@ import { AuthLayout } from '@/app/layouts/AuthLayout'
 import { GuestOnlyRoute } from '@/features/auth/routing/GuestOnlyRoute'
 import { ProtectedRoute } from '@/features/auth/routing/ProtectedRoute'
 import { RoleRoute } from '@/features/auth/routing/RoleRoute'
-import { DashboardPlaceholderPage } from '@/features/dashboard/pages/DashboardPlaceholderPage'
+import { DashboardPage } from '@/features/dashboard/pages/DashboardPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { NotificationsPlaceholderPage } from '@/features/notifications/pages/NotificationsPlaceholderPage'
 import { SettingsPlaceholderPage } from '@/features/settings/pages/SettingsPlaceholderPage'
@@ -45,7 +45,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route element={<RoleRoute allowedRoles={['ADMIN', 'TECHNICIAN']} />}>
-            <Route element={<DashboardPlaceholderPage />} path="/dashboard" />
+            <Route element={<DashboardPage />} path="/dashboard" />
           </Route>
           <Route element={<TicketsPage />} path="/tickets" />
           <Route

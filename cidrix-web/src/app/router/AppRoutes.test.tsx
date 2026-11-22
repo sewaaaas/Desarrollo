@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppRoutes } from '@/app/router/AppRoutes'
 import {
   AuthContext,
@@ -16,6 +16,42 @@ import type { ApiClient } from '@/shared/services/api/api-client'
 
 const testApiClient: ApiClient = {
   request: vi.fn().mockImplementation((path: string) => {
+    if (path === 'dashboard/overview') {
+      return Promise.resolve({
+        summary: {
+          total: 0,
+          byStatus: { OPEN: 0, IN_PROGRESS: 0, PENDING: 0, RESOLVED: 0, CLOSED: 0, CANCELLED: 0 },
+        },
+        byPriority: { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 },
+        byCategory: [],
+        assigneeWorkload: {
+          activeStatuses: ['OPEN', 'IN_PROGRESS', 'PENDING'],
+          unassignedTickets: 0,
+          assignees: [],
+        },
+        resolutionTime: {
+          resolutionSampleCount: 0,
+          averageResolutionSeconds: null,
+          closureSampleCount: 0,
+          averageClosureSeconds: null,
+        },
+      })
+    }
+    if (path.startsWith('dashboard/trends?period=')) {
+      const period = path.slice('dashboard/trends?period='.length) as '7d' | '30d' | '90d'
+      const days = Number.parseInt(period, 10)
+      return Promise.resolve({
+        period,
+        timezone: 'UTC',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        series: Array.from({ length: days }, (_, index) => ({
+          date: `2026-09-${String(index + 1).padStart(2, '0')}`,
+          created: 0,
+          closed: 0,
+        })),
+      })
+    }
     if (path.startsWith('tickets?')) {
       return Promise.resolve({
         data: [],
@@ -102,6 +138,10 @@ function renderRoute(
 }
 
 describe('AppRoutes', () => {
+  beforeEach(() => {
+    vi.mocked(testApiClient.request).mockClear()
+  })
+
   it('renderiza /login solo para una sesión anónima', () => {
     renderRoute('/login', {
       reason: 'initial',
@@ -207,7 +247,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   })
 
-  it('impide que USER permanezca en Dashboard', () => {
+  it('impide que USER permanezca en Dashboard sin solicitar métricas', () => {
     renderRoute('/dashboard', {
       status: 'authenticated',
       user: createUser('USER'),
@@ -217,6 +257,11 @@ describe('AppRoutes', () => {
     expect(
       screen.queryByRole('heading', { name: 'Dashboard' }),
     ).not.toBeInTheDocument()
+    expect(
+      vi.mocked(testApiClient.request).mock.calls.some(([path]) =>
+        String(path).startsWith('dashboard/'),
+      ),
+    ).toBe(false)
   })
 
   it('resuelve una ruta dinámica de ticket sin loops', async () => {
