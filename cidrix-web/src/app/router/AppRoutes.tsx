@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@/features/auth/routing/ProtectedRoute'
 import { RoleRoute } from '@/features/auth/routing/RoleRoute'
 import { DashboardPlaceholderPage } from '@/features/dashboard/pages/DashboardPlaceholderPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
-import { NotificationsPlaceholderPage } from '@/features/notifications/pages/NotificationsPlaceholderPage'
+import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage'
 import { SettingsPlaceholderPage } from '@/features/settings/pages/SettingsPlaceholderPage'
 import { TicketDetailPage } from '@/features/tickets/pages/TicketDetailPage'
 import { TicketsPage } from '@/features/tickets/pages/TicketsPage'
@@ -53,7 +53,7 @@ export function AppRoutes() {
             path="/tickets/:id"
           />
           <Route
-            element={<NotificationsPlaceholderPage />}
+            element={<NotificationsPage />}
             path="/notifications"
           />
           <Route element={<SettingsPlaceholderPage />} path="/settings" />

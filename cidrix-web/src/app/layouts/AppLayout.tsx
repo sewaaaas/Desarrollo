@@ -2,8 +2,14 @@ import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '@/features/auth'
 import { getNavigationItemsForRole } from '@/features/auth/routing/role-routes'
 import { Button } from '@/shared/components/Button'
+import { NotificationsUnreadProvider } from '@/features/notifications/context/NotificationsUnreadProvider'
+import { UnreadBadge } from '@/features/notifications/components/UnreadBadge'
 
 export function AppLayout() {
+  return <NotificationsUnreadProvider><AppLayoutContent /></NotificationsUnreadProvider>
+}
+
+function AppLayoutContent() {
   const { logout, state } = useAuth()
 
   if (state.status !== 'authenticated') {
@@ -39,6 +45,7 @@ export function AppLayout() {
                   to={item.to}
                 >
                   {item.label}
+                  {item.to === '/notifications' ? <UnreadBadge /> : null}
                 </NavLink>
               </li>
             ))}
