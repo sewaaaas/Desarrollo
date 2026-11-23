@@ -16,6 +16,15 @@ import type { ApiClient } from '@/shared/services/api/api-client'
 
 const testApiClient: ApiClient = {
   request: vi.fn().mockImplementation((path: string) => {
+    if (path === 'notifications/unread-count') {
+      return Promise.resolve({ count: 0 })
+    }
+    if (path.startsWith('notifications?')) {
+      return Promise.resolve({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      })
+    }
     if (path === 'dashboard/overview') {
       return Promise.resolve({
         summary: {
@@ -141,6 +150,19 @@ describe('AppRoutes', () => {
   beforeEach(() => {
     vi.mocked(testApiClient.request).mockClear()
   })
+
+  it.each(['ADMIN', 'TECHNICIAN', 'USER'] as const)(
+    'permite Notificaciones a %s',
+    async (role) => {
+      renderRoute('/notifications', {
+        status: 'authenticated',
+        user: createUser(role),
+      })
+
+      expect(await screen.findByText('No tienes notificaciones.')).toBeVisible()
+      expect(screen.getByRole('heading', { name: 'Notificaciones' })).toBeVisible()
+    },
+  )
 
   it('renderiza /login solo para una sesión anónima', () => {
     renderRoute('/login', {

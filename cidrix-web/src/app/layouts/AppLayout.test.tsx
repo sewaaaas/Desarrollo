@@ -2,14 +2,14 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { AppLayout } from '@/app/layouts/AppLayout'
-import { AuthContext } from '@/features/auth/context/auth-context'
+import { AuthContext, AuthenticatedApiContext } from '@/features/auth/context/auth-context'
 import type {
   AuthContextValue,
   AuthUser,
   UserRole,
 } from '@/features/auth/model/auth.types'
 
-function renderLayout(role: UserRole) {
+function renderLayout(role: UserRole, count = 0, failCount = false) {
   const user: AuthUser = {
     avatarUrl: null,
     email: `${role.toLowerCase()}@cidrix.test`,
@@ -27,6 +27,7 @@ function renderLayout(role: UserRole) {
 
   render(
     <AuthContext.Provider value={context}>
+      <AuthenticatedApiContext.Provider value={{ request: vi.fn().mockImplementation(() => failCount ? Promise.reject(new Error('count')) : Promise.resolve({ count })) }}>
       <MemoryRouter initialEntries={['/tickets']}>
         <Routes>
           <Route element={<AppLayout />}>
@@ -34,6 +35,7 @@ function renderLayout(role: UserRole) {
           </Route>
         </Routes>
       </MemoryRouter>
+      </AuthenticatedApiContext.Provider>
     </AuthContext.Provider>,
   )
 
@@ -41,6 +43,17 @@ function renderLayout(role: UserRole) {
 }
 
 describe('AppLayout', () => {
+  it.each(['ADMIN', 'TECHNICIAN', 'USER'] as const)('muestra Notificaciones con badge para %s', async (role) => {
+    renderLayout(role, 4)
+    expect(await screen.findByLabelText('4 notificaciones sin leer')).toBeVisible()
+    expect(screen.getByRole('link', { name: /Notificaciones/ })).toBeVisible()
+  })
+
+  it('un fallo del count conserva navegación', async () => {
+    renderLayout('USER', 0, true)
+    expect(screen.getByRole('link', { name: 'Notificaciones' })).toBeVisible()
+    expect(await screen.findByText('Contenido')).toBeVisible()
+  })
   it.each(['ADMIN', 'TECHNICIAN'] as const)(
     'muestra usuario, logout y Dashboard para %s',
     (role) => {
