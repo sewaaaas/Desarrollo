@@ -7,7 +7,7 @@ import { RoleRoute } from '@/features/auth/routing/RoleRoute'
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage'
-import { SettingsPlaceholderPage } from '@/features/settings/pages/SettingsPlaceholderPage'
+import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 import { TicketDetailPage } from '@/features/tickets/pages/TicketDetailPage'
 import { TicketsPage } from '@/features/tickets/pages/TicketsPage'
 import { Card } from '@/shared/components/Card'
@@ -56,7 +56,7 @@ export function AppRoutes() {
             element={<NotificationsPage />}
             path="/notifications"
           />
-          <Route element={<SettingsPlaceholderPage />} path="/settings" />
+          <Route element={<SettingsPage />} path="/settings" />
         </Route>
       </Route>
 

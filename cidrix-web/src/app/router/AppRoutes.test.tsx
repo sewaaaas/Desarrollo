@@ -16,6 +16,7 @@ import type { ApiClient } from '@/shared/services/api/api-client'
 
 const testApiClient: ApiClient = {
   request: vi.fn().mockImplementation((path: string) => {
+    if (path === 'settings') return Promise.resolve({ timezone: 'America/Lima' })
     if (path === 'notifications/unread-count') {
       return Promise.resolve({ count: 0 })
     }
@@ -149,6 +150,23 @@ function renderRoute(
 describe('AppRoutes', () => {
   beforeEach(() => {
     vi.mocked(testApiClient.request).mockClear()
+  })
+
+  it.each(['ADMIN', 'TECHNICIAN', 'USER'] as const)('permite Settings a %s con permisos de edición correctos', async (role) => {
+    renderRoute('/settings', { status: 'authenticated', user: createUser(role) })
+    expect(screen.getByRole('heading', { name: 'Configuración' })).toBeVisible()
+    if (role === 'ADMIN') expect(await screen.findByRole('combobox', { name: 'Zona horaria' })).toHaveValue('America/Lima')
+    else {
+      expect(await screen.findByText('America/Lima', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    }
+    expect(vi.mocked(testApiClient.request).mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(0)
+  })
+
+  it('bloquea Settings sin sesión y no consulta su API', () => {
+    renderRoute('/settings', { status: 'unauthenticated', user: null })
+    expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible()
+    expect(vi.mocked(testApiClient.request).mock.calls.some(([path]) => path === 'settings')).toBe(false)
   })
 
   it.each(['ADMIN', 'TECHNICIAN', 'USER'] as const)(
